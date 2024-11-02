@@ -17,6 +17,7 @@ import com.meetme.dto.TimeSlotDTO;
 import com.meetme.service.MeetingService;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -37,7 +38,7 @@ public class CalendarController {
     public ResponseEntity<String> bookMeeting(@RequestBody MeetingRequestDTO meetingRequest) {
         logger.info("Received request to book meeting: {}", meetingRequest);
     try {
-        meetingService.bookMeeting(meetingRequest.getOwnerId(), meetingRequest);
+        calendarService.bookMeeting(meetingRequest.getOwnerId(), meetingRequest.getStartTime(),meetingRequest.getDuration(),meetingRequest.getParticipantIds());
         logger.info("Meeting booked successfully.");
         return ResponseEntity.ok("Meeting booked successfully.");
     }
@@ -52,33 +53,41 @@ public class CalendarController {
      }
     }
 
-    @GetMapping("/availability")
-    public ResponseEntity<List<TimeSlotDTO>> getAvailableSlots(@RequestParam Long userId, @RequestParam Duration duration) {
-        logger.info("Received request to check available slots for user ID: {} with duration: {}", userId, duration);
+    @PostMapping("/conflicts")
+    public ResponseEntity<List<User>> checkConflicts(@RequestBody MeetingRequestDTO meetingRequest) {
+        logger.info("Received request to check conflicts for meeting with participant IDs: {}", meetingRequest.getParticipantIds());
         try {
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
-            List<TimeSlotDTO> availableSlots = calendarService.getAvailableSlots(user.getCalendar(), duration);
-            logger.info("Available slots found for user ID {}: {}", userId, availableSlots.size());
-            return ResponseEntity.ok(availableSlots);
-        } catch (UserNotFoundException e) {
-            logger.warn("User not found with ID: {}", userId);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+            List<User> conflictingUsers= calendarService.checkConflicts(meetingRequest.getParticipantIds(), meetingRequest.getStartTime(), meetingRequest.getDuration());
+            logger.info("Conflicts found: {} users have conflicting schedules", conflictingUsers.size());
+
+            return ResponseEntity.ok(conflictingUsers);
         } catch (Exception e) {
-            logger.error("Error retrieving available slots for user ID: {}", userId, e);
+            logger.error("Error checking conflicts for meeting request with participant IDs: {}", meetingRequest.getParticipantIds(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
 
-    @PostMapping("/conflicts")
-    public ResponseEntity<List<User>> getConflicts(@RequestBody MeetingRequestDTO meetingRequest) {
-        logger.info("Received request to check conflicts for meeting with participant IDs: {}", meetingRequest.getParticipantIds());
+
+   @GetMapping("/availability")
+    public ResponseEntity<List<LocalDateTime[]>> getAvailableSlots(@RequestParam Long userId1, @RequestParam Long userId2, @RequestParam String duration) {
+        logger.info("Received request to check available slots for user IDs: {} and {} with duration: {}", userId1,userId2,duration);
         try {
-            List<User> conflictingUsers = meetingService.checkConflicts(meetingRequest.getParticipantIds(), meetingRequest);
-            logger.info("Conflicts found: {} users have conflicting schedules", conflictingUsers.size());
-            return ResponseEntity.ok(conflictingUsers);
+            User user1 = userRepository.findById(userId1)
+                    .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId1));
+
+            User user2 = userRepository.findById(userId2)
+                    .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId2));
+
+            Duration dur = Duration.parse(duration);
+
+            List<LocalDateTime[]> availableSlots = calendarService.getFreeSlots(user1.getCalendar(),user2.getCalendar(), dur);
+            logger.info("Available slots found for user ID {} and {}: {}", userId1,user2, availableSlots.size());
+            return ResponseEntity.ok(availableSlots);
+        } catch (UserNotFoundException e) {
+            logger.warn("User not found with ID: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
         } catch (Exception e) {
-            logger.error("Error checking conflicts for meeting request with participant IDs: {}", meetingRequest.getParticipantIds(), e);
+            logger.error("Error retrieving available slots for user IDs: {} and {}", userId1,userId2, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
