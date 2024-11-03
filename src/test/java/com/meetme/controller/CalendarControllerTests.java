@@ -1,23 +1,19 @@
-/*
 package com.meetme.controller;
 
 import com.meetme.dto.MeetingRequestDTO;
-import com.meetme.dto.TimeSlotDTO;
 import com.meetme.entities.Calendar;
 import com.meetme.entities.User;
-import com.meetme.service.CalendarService;
-import com.meetme.service.MeetingService;
+import com.meetme.exception.MeetingConflictException;
+import com.meetme.exception.UserNotFoundException;
 import com.meetme.repository.UserRepository;
+import com.meetme.service.CalendarService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -25,106 +21,163 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-public class CalendarControllerTests {
+class CalendarControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Mock
-    private UserRepository userRepository;
+    @InjectMocks
+    private CalendarController calendarController;
 
     @Mock
     private CalendarService calendarService;
 
     @Mock
-    private MeetingService meetingService;
-
-    @InjectMocks
-    private CalendarController calendarController;
-
-    private User user;
+    private UserRepository userRepository;
 
     @BeforeEach
-    public void setup() {
+    void setUp() {
         MockitoAnnotations.openMocks(this);
-
-        user = new User();
-        user.setId(1L);
-        Calendar calendar = new Calendar();
-        user.setCalendar(calendar);
     }
 
     @Test
-    public void testGetAvailableSlots_Success() throws Exception {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(calendarService.getAvailableSlots(any(Calendar.class), any(Duration.class)))
-                .thenReturn(List.of(new TimeSlotDTO(LocalDateTime.now(), LocalDateTime.now().plusMinutes(30))));
+    void testBookMeeting_Success() {
 
-        mockMvc.perform(get("/api/calendar/availability")
-                        .param("userId", "1L")
-                        .param("duration", "PT30M"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+        MeetingRequestDTO meetingRequest = new MeetingRequestDTO();
+        meetingRequest.setOwnerId(1L);
+        meetingRequest.setStartTime(LocalDateTime.now().plusHours(1));
+        meetingRequest.setDuration(Duration.ofMinutes(30));
+        meetingRequest.setParticipantIds(List.of(2L,3L));
 
-        verify(calendarService, times(1)).getAvailableSlots(any(Calendar.class), any(Duration.class));
+        ResponseEntity<String> response = calendarController.bookMeeting(meetingRequest);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("Meeting booked successfully.", response.getBody());
+        verify(calendarService, times(1)).bookMeeting(anyLong(), any(LocalDateTime.class), any(Duration.class), anyList());
+    }
+
+    // Test for booking a meeting with conflict
+    @Test
+    void testBookMeeting_Conflict() {
+
+        MeetingRequestDTO meetingRequest = new MeetingRequestDTO();
+        meetingRequest.setOwnerId(1L);
+        meetingRequest.setStartTime(LocalDateTime.now().plusHours(1));
+        meetingRequest.setDuration(Duration.ofMinutes(30));
+        meetingRequest.setParticipantIds(List.of(2L,3L));
+
+        doThrow(new MeetingConflictException("Conflict detected")).when(calendarService).bookMeeting(anyLong(), any(LocalDateTime.class), any(Duration.class), anyList());
+
+        ResponseEntity<String> response = calendarController.bookMeeting(meetingRequest);
+
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertEquals("Conflict detected", response.getBody());
+        verify(calendarService, times(1)).bookMeeting(anyLong(), any(LocalDateTime.class), any(Duration.class), anyList());
     }
 
     @Test
-    public void testGetAvailableSlots_UserNotFound() throws Exception {
-        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+    void testBookMeeting_ServerError() {
 
-        mockMvc.perform(get("/api/calendar/availability")
-                        .param("userId", "1L")
-                        .param("duration", "PT30M"))
-                .andExpect(status().isNotFound());
+        MeetingRequestDTO meetingRequest = new MeetingRequestDTO();
+        meetingRequest.setOwnerId(1L);
+        meetingRequest.setStartTime(LocalDateTime.now().plusHours(1));
+        meetingRequest.setDuration(Duration.ofMinutes(30));
+        meetingRequest.setParticipantIds(List.of(2L,3L));
 
-        verify(calendarService, never()).getAvailableSlots(any(Calendar.class), any(Duration.class));
+        doThrow(new RuntimeException("Unexpected error")).when(calendarService).bookMeeting(anyLong(), any(LocalDateTime.class), any(Duration.class), anyList());
+
+        ResponseEntity<String> response = calendarController.bookMeeting(meetingRequest);
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals("Error booking meeting.", response.getBody());
+        verify(calendarService, times(1)).bookMeeting(anyLong(), any(LocalDateTime.class), any(Duration.class), anyList());
     }
 
+    // Test for checking conflicts successfully
     @Test
-    public void testGetConflicts_Success() throws Exception {
-        MeetingRequestDTO request = new MeetingRequestDTO();
-        request.setParticipantIds(List.of(1L, 2L));
-        request.setStartTime(LocalDateTime.now());
-        request.setDuration(Duration.ofMinutes(30));
+    void testCheckConflicts_Success() {
 
-        when(meetingService.checkConflicts(anyList(), any(MeetingRequestDTO.class)))
+        MeetingRequestDTO meetingRequest = new MeetingRequestDTO();
+        meetingRequest.setOwnerId(1L);
+        meetingRequest.setStartTime(LocalDateTime.now().plusHours(1));
+        meetingRequest.setDuration(Duration.ofMinutes(30));
+        meetingRequest.setParticipantIds(List.of(2L,3L));
+
+        when(calendarService.checkConflicts(anyList(), any(LocalDateTime.class), any(Duration.class)))
                 .thenReturn(Collections.emptyList());
 
-        mockMvc.perform(post("/api/calendar/conflicts")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"participantIds\": [1, 2], \"startTime\": \"2024-11-10T10:00:00\", \"duration\": \"PT30M\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+        ResponseEntity<List<User>> response = calendarController.checkConflicts(meetingRequest);
 
-        verify(meetingService, times(1)).checkConflicts(anyList(), any(MeetingRequestDTO.class));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(0, response.getBody().size());
+        verify(calendarService, times(1)).checkConflicts(anyList(), any(LocalDateTime.class), any(Duration.class));
     }
 
+    // Test for server error during conflict check
     @Test
-    public void testGetConflicts_WithConflicts() throws Exception {
-        MeetingRequestDTO request = new MeetingRequestDTO();
-        request.setParticipantIds(List.of(1L, 2L));
-        request.setStartTime(LocalDateTime.now());
-        request.setDuration(Duration.ofMinutes(30));
+    void testCheckConflicts_ServerError() {
+        MeetingRequestDTO meetingRequest = new MeetingRequestDTO();
+        meetingRequest.setOwnerId(1L);
+        meetingRequest.setStartTime(LocalDateTime.now().plusHours(1));
+        meetingRequest.setDuration(Duration.ofMinutes(30));
+        meetingRequest.setParticipantIds(List.of(2L,3L));
 
-        User conflictingUser = new User();
-        conflictingUser.setId(2L);
-        when(meetingService.checkConflicts(anyList(), any(MeetingRequestDTO.class)))
-                .thenReturn(List.of(conflictingUser));
+        doThrow(new RuntimeException("Unexpected error")).when(calendarService).checkConflicts(anyList(), any(LocalDateTime.class), any(Duration.class));
 
-        mockMvc.perform(post("/api/calendar/conflicts")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"participantIds\": [1, 2], \"startTime\": \"2024-11-10T10:00:00\", \"duration\": \"PT30M\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+        ResponseEntity<List<User>> response = calendarController.checkConflicts(meetingRequest);
 
-        verify(meetingService, times(1)).checkConflicts(anyList(), any(MeetingRequestDTO.class));
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals(null, response.getBody());
+        verify(calendarService, times(1)).checkConflicts(anyList(), any(LocalDateTime.class), any(Duration.class));
+    }
+
+    // Test for retrieving available slots successfully
+    @Test
+    void testGetAvailableSlots_Success() {
+        Duration duration = Duration.ofMinutes(30);
+        User user1 = new User();
+        user1.setId(1L);
+        user1.setCalendar(new Calendar());
+        User user2 = new User();
+        user2.setId(2L);
+        user2.setCalendar(new Calendar());
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user1));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user2));
+        when(calendarService.getFreeSlots(any(), any(), eq(duration)))
+                .thenReturn(List.<LocalDateTime[]>of(new LocalDateTime[]{LocalDateTime.now(), LocalDateTime.now().plusMinutes(30)}));
+
+        ResponseEntity<List<LocalDateTime[]>> response = calendarController.getAvailableSlots(1L, 2L, duration.toString());
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1, response.getBody().size());
+        verify(calendarService, times(1)).getFreeSlots(any(), any(), eq(duration));
+    }
+
+    // Test for user not found in availability check
+    @Test
+    void testGetAvailableSlots_UserNotFound() {
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+
+        ResponseEntity<List<LocalDateTime[]>> response = calendarController.getAvailableSlots(1L, 2L, "PT30M");
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertEquals(null, response.getBody());
+        verify(userRepository, times(1)).findById(1L);
+    }
+
+    // Test for unexpected server error in availability check
+    @Test
+    void testGetAvailableSlots_ServerError() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(new User()));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(new User()));
+        doThrow(new RuntimeException("Unexpected error")).when(calendarService).getFreeSlots(any(), any(), any(Duration.class));
+
+        ResponseEntity<List<LocalDateTime[]>> response = calendarController.getAvailableSlots(1L, 2L, "PT30M");
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals(null, response.getBody());
+        verify(calendarService, times(1)).getFreeSlots(any(), any(), any(Duration.class));
     }
 }
-*/

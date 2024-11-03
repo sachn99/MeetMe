@@ -29,9 +29,6 @@ class CalendarServiceTest {
     private CalendarService calendarService;
 
 
-    @InjectMocks
-    private MeetingService meetingService;
-
     @Mock
     private UserRepository userRepository;
 

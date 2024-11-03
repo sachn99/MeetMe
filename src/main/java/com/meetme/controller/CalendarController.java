@@ -14,7 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.meetme.dto.MeetingRequestDTO;
 import com.meetme.dto.TimeSlotDTO;
-import com.meetme.service.MeetingService;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -26,8 +25,6 @@ public class CalendarController {
 
     private static final Logger logger = LoggerFactory.getLogger(CalendarController.class);
 
-    @Autowired
-    private MeetingService meetingService;
     @Autowired
     private CalendarService calendarService;
 
