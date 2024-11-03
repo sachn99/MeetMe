@@ -1,4 +1,3 @@
--- Drop the sequence if it exists, then recreate it
 DROP SEQUENCE IF EXISTS calendar_seq;
 CREATE SEQUENCE calendar_seq START WITH 1 INCREMENT BY 1;
 

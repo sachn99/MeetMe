@@ -15,8 +15,8 @@ public class Calendar {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToMany(mappedBy = "calendar", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY) // LAZY loading here
-    @JsonManagedReference  // or @JsonIgnore if not needed in JSON
+    @OneToMany(mappedBy = "calendar", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonManagedReference
     private List<Meeting> meetings = new ArrayList<>();
 
 }

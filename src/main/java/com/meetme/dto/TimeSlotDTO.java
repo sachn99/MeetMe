@@ -14,6 +14,4 @@ public class TimeSlotDTO {
         this.start = start;
         this.end = end;
     }
-
-    // Getters and setters
 }

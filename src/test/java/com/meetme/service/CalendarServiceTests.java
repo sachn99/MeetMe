@@ -53,7 +53,6 @@ class CalendarServiceTest {
         owner.setId(1L);
         owner.setCalendar(calendar);
 
-        // Initialize Users and Calendars
         Calendar calendar1 = new Calendar();
         Calendar calendar2 = new Calendar();
 
@@ -147,13 +146,11 @@ class CalendarServiceTest {
 
         List<LocalDateTime[]> freeSlots = calendarService.getFreeSlots(user1.getCalendar(), user2.getCalendar(), duration);
 
-        // Expecting slots throughout the workday, e.g., 9:00 AM to 5:00 PM
+        // Expecting slots throughout the workday, i.e: 9:00 AM to 5:00 PM
         assertFalse(freeSlots.isEmpty());
         assertEquals(LocalTime.of(9, 0), freeSlots.get(0)[0].toLocalTime());
         assertEquals(LocalTime.of(17, 0), freeSlots.get(freeSlots.size() - 1)[1].toLocalTime());
     }
-    // Add similar tests for free slot logic once it's implemented.
-
 
     @Test
     void testGetFreeSlots_WithGapsForMeeting() {
@@ -185,7 +182,7 @@ class CalendarServiceTest {
 
     @Test
     void testGetFreeSlots_NoCommonFreeSlots() {
-        Duration duration = Duration.ofHours(2);  // Large duration unlikely to fit in gaps
+        Duration duration = Duration.ofHours(2);
         LocalDateTime now = LocalDateTime.now().withHour(9).withMinute(0);
 
         // User 1 full day booked

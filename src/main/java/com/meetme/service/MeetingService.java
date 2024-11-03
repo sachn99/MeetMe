@@ -25,7 +25,6 @@ public class MeetingService {
     private MeetingRepository meetingRepository;
 
 
-    // Check conflicts for a meeting
 /*
     public List<User> checkConflicts(List<Long> participantIds, LocalDateTime startTime, Duration duration) {
         LocalDateTime endTime = startTime.plus(duration);

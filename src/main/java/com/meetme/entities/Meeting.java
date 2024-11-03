@@ -27,9 +27,9 @@ public class Meeting {
     )
     private List<User> participants = new ArrayList<>();
 
-    @ManyToOne(fetch = FetchType.LAZY) // LAZY loading here
-    @JoinColumn(name = "calendar_id")  // Foreign key column in the Meeting table
-    @JsonBackReference  // or @JsonIgnore to avoid infinite serialization
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "calendar_id")
+    @JsonBackReference
     private Calendar calendar;
 
 }
